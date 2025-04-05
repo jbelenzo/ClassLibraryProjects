@@ -8,6 +8,9 @@ variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
+  packageVersion: '1.0.$(Build.BuildId)'  # Auto-generate package version based on build ID
+  feedName: 'FEED-LAB4-COMP357'  # Set the Azure Artifacts feed name
+  packageName: 'Lab4ClassLibraryProjectsNuGetPackage'  # Set the NuGet package name
 
 jobs:
 - job: InitializeJob
@@ -62,9 +65,33 @@ jobs:
         configuration: '$(buildConfiguration)'
       displayName: 'Run Tests'
 
+- job: PackNuGetPackage
+  displayName: 'Pack NuGet Package'
+  dependsOn: VSTest
+  steps:
+    - task: NuGetCommand@2
+      inputs:
+        command: 'pack'
+        packagesToPack: '**/*.csproj'  # Adjust to target the correct project or solution
+        versioningScheme: 'off'  # Use custom versioning (set below)
+        version: '$(packageVersion)'  # Set the package version
+        outputDir: '$(Build.ArtifactStagingDirectory)/nuget'
+      displayName: 'Pack NuGet Package'
+
+- job: PushNuGetPackage
+  displayName: 'Push NuGet Package to Azure Artifacts'
+  dependsOn: PackNuGetPackage
+  steps:
+    - task: NuGetCommand@2
+      inputs:
+        command: 'push'
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'  # Adjust to the exact path of your .nupkg file
+        nuGetFeed: '$(feedName)'  # The name of your Azure Artifacts feed
+      displayName: 'Push NuGet Package to Azure Artifacts'
+
 - job: PostJobCheck
   displayName: 'Post-job Check'
-  dependsOn: VSTest
+  dependsOn: PushNuGetPackage
   steps:
     - script: echo "Performing post-job checks"
       displayName: 'Post-job checks step'
