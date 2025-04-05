@@ -48,4 +48,4 @@ steps:
   displayName: NuGet push to artifact nuget feeds
   inputs:
     command: push
-    feedPublish: ClassLibraryProjectsLab4Project/COMP367-FEED-LAB4
+    feedPublish: ClassLibraryProjectsLab4Project/COMP367-FEED-LAB4 #0e763e4c-ec4b-47c8-a852-e71610ccdb6c
