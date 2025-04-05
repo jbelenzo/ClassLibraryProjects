@@ -1,102 +1,51 @@
+# ASP.NET Core (.NET Framework)
+# Build and test ASP.NET Core projects targeting the full .NET Framework.
+# Add steps that publish symbols, save build artifacts, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
+
 trigger:
-- master
+- main
 
 pool:
-  name: 'COMP367-Windows'  # Specify your self-hosted agent pool name
+  vmImage: 'windows-latest'
+  name: COMP367-Windows
 
 variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  packageVersion: '1.0.$(Build.BuildId)'  # Auto-generate package version based on build ID
-  feedName: 'FEED-LAB4-COMP357'  # Set the Azure Artifacts feed name
-  packageName: 'Lab4ClassLibraryProjectsNuGetPackage'  # Set the NuGet package name
 
-jobs:
-- job: InitializeJob
-  displayName: 'Initialize Job'
-  steps:
-    - script: echo "Initializing build process"
-      displayName: 'Initialization step'
+steps:
+- task: NuGetToolInstaller@1
 
-- job: CheckoutClassLibraryProjects
-  displayName: 'Checkout ClassLibraryProjects'
-  dependsOn: InitializeJob
-  steps:
-    - checkout: self
-      displayName: 'Checkout source code'
+- task: NuGetCommand@2
+  inputs:
+    restoreSolution: '$(solution)'
 
-- job: InstallDotNetSDK
-  displayName: 'Install .NET SDK'
-  dependsOn: CheckoutClassLibraryProjects
-  steps:
-    - task: UseDotNet@2
-      inputs:
-        packageType: 'sdk'
-        version: '8.x'  # Install .NET 8 SDK
-        installationPath: $(Agent.ToolsDirectory)/dotnet
-      displayName: 'Install .NET 8 SDK'
+- task: VSBuild@1
+  inputs:
+    solution: '$(solution)'
+    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Default Web Site"'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
 
-- job: RestoreNuGetPackages
-  displayName: 'Restore NuGet Packages'
-  dependsOn: InstallDotNetSDK
-  steps:
-    - task: NuGetCommand@2
-      inputs:
-        command: 'restore'
-        restoreSolution: '$(solution)'
-        restoreArguments: '--no-cache --disable-parallel'
-      displayName: 'Restore NuGet packages'
+- task: VSTest@2
+  inputs:
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'ClassLibraryProjets'
+    publishLocation: 'Container'
 
-- job: BuildSolution
-  displayName: 'Build Solution'
-  dependsOn: RestoreNuGetPackages
-  steps:
-    - task: VSBuild@1
-      inputs:
-        solution: '$(solution)'
-        platform: '$(buildPlatform)'
-        configuration: '$(buildConfiguration)'
-        msbuildArgs: '/p:Platform=$(buildPlatform) /p:Configuration=$(buildConfiguration) /p:VisualStudioVersion=17.0'
-      displayName: 'Build the Solution'
-
-- job: RunTests
-  displayName: 'Run Unit Tests'
-  dependsOn: BuildSolution
-  steps:
-    - task: VSTest@2
-      inputs:
-        platform: '$(buildPlatform)'
-        configuration: '$(buildConfiguration)'
-      displayName: 'Run Tests'
-
-- job: PackNuGetPackage
-  displayName: 'Pack NuGet Package'
-  dependsOn: RunTests
-  steps:
-    - task: DotNetCoreCLI@2
-      inputs:
-        command: 'pack'
-        packagesToPack: '**/*.csproj'  # Adjust to target the correct project
-        versioningScheme: 'off'
-        version: '$(packageVersion)'  # Use custom versioning based on build ID
-        outputDir: '$(Build.ArtifactStagingDirectory)/nuget'
-      displayName: 'Pack NuGet Package'
-
-- job: PushNuGetPackage
-  displayName: 'Push NuGet Package to Azure Artifacts'
-  dependsOn: PackNuGetPackage
-  steps:
-    - task: NuGetCommand@2
-      inputs:
-        command: 'push'
-        packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'  # Path to the .nupkg file
-        nuGetFeed: '$(feedName)'  # The name of your Azure Artifacts feed
-      displayName: 'Push NuGet Package to Azure Artifacts'
-
-- job: FinalizeJob
-  displayName: 'Finalize Job'
-  dependsOn: PushNuGetPackage
-  steps:
-    - script: echo "Finalizing build process"
-      displayName: 'Finalizing job step'
+- task: DotNetCoreCLI@2
+  displayName: dotnet pack
+  inputs:
+    command: pack
+    versioningScheme: byPrereleaseNumber
+- task: NuGetCommand@2
+  displayName: NuGet push to artifact nuget feeds
+  inputs:
+    command: push
+    feedPublish: FEED-LAB4-COMP357 # using nuget feed id not name here
