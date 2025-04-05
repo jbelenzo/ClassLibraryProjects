@@ -48,4 +48,4 @@ steps:
   displayName: NuGet push to artifact nuget feeds
   inputs:
     command: push
-    feedPublish: 'COMP367-FEED-LAB4'
+    feedPublish: '3d689e98-4851-413e-b34a-54451dad2ba1'
