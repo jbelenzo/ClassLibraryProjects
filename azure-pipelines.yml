@@ -26,39 +26,43 @@ jobs:
     - checkout: self
       displayName: 'Checkout source code'
 
-- job: NuGetToolInstallation
-  displayName: 'NuGetToolInstallation'
+- job: InstallDotNetSDK
+  displayName: 'Install .NET SDK'
   dependsOn: CheckoutClassLibraryProjects
   steps:
-    - task: NuGetToolInstaller@1
-      displayName: 'Install NuGet tool'
+    - task: UseDotNet@2
+      inputs:
+        packageType: 'sdk'
+        version: '8.x'  # Install .NET 8 SDK
+        installationPath: $(Agent.ToolsDirectory)/dotnet
+      displayName: 'Install .NET 8 SDK'
 
-- job: NuGetCommand
-  displayName: 'NuGetCommand'
-  dependsOn: NuGetToolInstallation
+- job: RestoreNuGetPackages
+  displayName: 'Restore NuGet Packages'
+  dependsOn: InstallDotNetSDK
   steps:
     - task: NuGetCommand@2
       inputs:
         command: 'restore'
         restoreSolution: '$(solution)'
-        restoreArguments: '--no-cache --disable-parallel'  # Ensures restore completes without caching issues
+        restoreArguments: '--no-cache --disable-parallel'
       displayName: 'Restore NuGet packages'
 
-- job: VSBuild
-  displayName: 'VSBuild'
-  dependsOn: NuGetCommand
+- job: BuildSolution
+  displayName: 'Build Solution'
+  dependsOn: RestoreNuGetPackages
   steps:
     - task: VSBuild@1
       inputs:
         solution: '$(solution)'
-        msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Default Web Site"'
         platform: '$(buildPlatform)'
         configuration: '$(buildConfiguration)'
-      displayName: 'Build Solution'
+        msbuildArgs: '/p:Platform=$(buildPlatform) /p:Configuration=$(buildConfiguration) /p:VisualStudioVersion=17.0'
+      displayName: 'Build the Solution'
 
-- job: VSTest
-  displayName: 'VSTest'
-  dependsOn: VSBuild
+- job: RunTests
+  displayName: 'Run Unit Tests'
+  dependsOn: BuildSolution
   steps:
     - task: VSTest@2
       inputs:
@@ -68,14 +72,14 @@ jobs:
 
 - job: PackNuGetPackage
   displayName: 'Pack NuGet Package'
-  dependsOn: VSTest
+  dependsOn: RunTests
   steps:
-    - task: NuGetCommand@2
+    - task: DotNetCoreCLI@2
       inputs:
         command: 'pack'
-        packagesToPack: '**/*.csproj'  # Adjust to target the correct project or solution
-        versioningScheme: 'off'  # Use custom versioning (set below)
-        version: '$(packageVersion)'  # Set the package version
+        packagesToPack: '**/*.csproj'  # Adjust to target the correct project
+        versioningScheme: 'off'
+        version: '$(packageVersion)'  # Use custom versioning based on build ID
         outputDir: '$(Build.ArtifactStagingDirectory)/nuget'
       displayName: 'Pack NuGet Package'
 
@@ -86,27 +90,13 @@ jobs:
     - task: NuGetCommand@2
       inputs:
         command: 'push'
-        packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'  # Adjust to the exact path of your .nupkg file
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/nuget/*.nupkg'  # Path to the .nupkg file
         nuGetFeed: '$(feedName)'  # The name of your Azure Artifacts feed
       displayName: 'Push NuGet Package to Azure Artifacts'
 
-- job: PostJobCheck
-  displayName: 'Post-job Check'
-  dependsOn: PushNuGetPackage
-  steps:
-    - script: echo "Performing post-job checks"
-      displayName: 'Post-job checks step'
-
 - job: FinalizeJob
   displayName: 'Finalize Job'
-  dependsOn: PostJobCheck
+  dependsOn: PushNuGetPackage
   steps:
-    - script: echo "Finalizing build and tests"
+    - script: echo "Finalizing build process"
       displayName: 'Finalizing job step'
-
-- job: ReportBuildStatus
-  displayName: 'Report Build Status'
-  dependsOn: FinalizeJob
-  steps:
-    - script: echo "Build and tests completed successfully!"
-      displayName: 'Report build status step'
