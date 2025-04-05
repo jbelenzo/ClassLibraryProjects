@@ -2,7 +2,6 @@
 # Build and test ASP.NET Core projects targeting the full .NET Framework.
 # Add steps that publish symbols, save build artifacts, and more:
 # https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
-
 trigger:
 - master
 
@@ -14,21 +13,75 @@ variables:
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
 
-steps:
-- task: NuGetToolInstaller@1
+jobs:
+- job: InitializeJob
+  displayName: 'Initialize Job'
+  steps:
+    - script: echo "Initializing build process"
+      displayName: 'Initialization step'
 
-- task: NuGetCommand@2
-  inputs:
-    restoreSolution: '$(solution)'
+- job: CheckoutClassLibraryProjects
+  displayName: 'Checkout ClassLibraryProjects'
+  dependsOn: InitializeJob
+  steps:
+    - checkout: self
+      displayName: 'Checkout source code'
 
-- task: VSBuild@1
-  inputs:
-    solution: '$(solution)'
-    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Default Web Site"'
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
+- job: NuGetToolInstallation
+  displayName: 'NuGetToolInstallation'
+  dependsOn: CheckoutClassLibraryProjects
+  steps:
+    - task: NuGetToolInstaller@1
+      displayName: 'Install NuGet tool'
 
-- task: VSTest@2
-  inputs:
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
+- job: NuGetCommand
+  displayName: 'NuGetCommand'
+  dependsOn: NuGetToolInstallation
+  steps:
+    - task: NuGetCommand@2
+      inputs:
+        restoreSolution: '$(solution)'
+      displayName: 'Restore NuGet packages'
+
+- job: VSBuild
+  displayName: 'VSBuild'
+  dependsOn: NuGetCommand
+  steps:
+    - task: VSBuild@1
+      inputs:
+        solution: '$(solution)'
+        msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Default Web Site"'
+        platform: '$(buildPlatform)'
+        configuration: '$(buildConfiguration)'
+      displayName: 'Build Solution'
+
+- job: VSTest
+  displayName: 'VSTest'
+  dependsOn: VSBuild
+  steps:
+    - task: VSTest@2
+      inputs:
+        platform: '$(buildPlatform)'
+        configuration: '$(buildConfiguration)'
+      displayName: 'Run Tests'
+
+- job: PostJobCheck
+  displayName: 'Post-job Check'
+  dependsOn: VSTest
+  steps:
+    - script: echo "Performing post-job checks"
+      displayName: 'Post-job checks step'
+
+- job: FinalizeJob
+  displayName: 'Finalize Job'
+  dependsOn: PostJobCheck
+  steps:
+    - script: echo "Finalizing build and tests"
+      displayName: 'Finalizing job step'
+
+- job: ReportBuildStatus
+  displayName: 'Report Build Status'
+  dependsOn: FinalizeJob
+  steps:
+    - script: echo "Build and tests completed successfully!"
+      displayName: 'Report build status step'
