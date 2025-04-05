@@ -37,6 +37,7 @@ jobs:
     - task: NuGetCommand@2
       inputs:
         restoreSolution: '$(solution)'
+        restoreArguments: '--no-cache'
       displayName: 'Restore NuGet packages'
 
 - job: VSBuild
