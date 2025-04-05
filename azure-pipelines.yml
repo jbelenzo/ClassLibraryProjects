@@ -39,8 +39,9 @@ jobs:
   steps:
     - task: NuGetCommand@2
       inputs:
+        command: 'restore'
         restoreSolution: '$(solution)'
-        restoreArguments: '--no-cache'
+        restoreArguments: '--no-cache --disable-parallel'  # Ensures restore completes without caching issues
       displayName: 'Restore NuGet packages'
 
 - job: VSBuild
